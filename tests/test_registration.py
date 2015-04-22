@@ -48,7 +48,23 @@ class TestICP(unittest.TestCase):
         print('recovered transform:')
         print(transf)
         print('true transform:')
-        print(self.full_transform)        
+        print(self.full_transform)
+
+    def check_algo_initial_guess(self, algo):
+        converged, transf, estimate, fitness = algo(self.source, self.target,
+                                                    guess=self.full_transform,
+                                                    max_iter=1000)
+
+        self.assertTrue(converged is True)
+        self.assertLess(fitness, .1)
+        self.assertTrue(isinstance(transf, np.ndarray))
+        self.assertEqual(transf.shape, (4, 4))
+
+        print('recovered transform:')
+        print(transf)
+        print('true transform:')
+        print(self.full_transform)
+        self.assertTrue(np.allclose(transf, self.full_transform, atol=0.5))
 
         # self.assertTrue(np.allclose(transf, self.full_transform, 1e-6))
 
@@ -68,10 +84,13 @@ class TestICP(unittest.TestCase):
         # print("---------")
 
     def testICP(self):
-        self.check_algo(icp)
+        # self.check_algo(icp)
+        self.check_algo_initial_guess(icp)
 
     def testGICP(self):
-        self.check_algo(gicp)
+        # self.check_algo(gicp)
+        self.check_algo_initial_guess(gicp)
 
     def testICP_NL(self):
-        self.check_algo(icp_nl)
+        # self.check_algo(icp_nl)
+        self.check_algo_initial_guess(icp_nl)
