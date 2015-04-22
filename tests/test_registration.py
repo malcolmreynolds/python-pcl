@@ -30,9 +30,11 @@ class TestICP(unittest.TestCase):
         target = np.dot(source, transform)
         self.target = pcl.PointCloud(target.astype(np.float32))
 
+        self.full_transform = np.eye(4)
+        self.full_transform[:3,:3] = transform
+
     def check_algo(self, algo):
-        converged, transf, estimate, fitness = algo(self.source, self.target,
-                                                    max_iter=1000)
+        converged, transf, estimate, fitness = algo(self.source, self.target, max_iter=1000)
         self.assertTrue(converged is True)
         self.assertLess(fitness, .1)
 
@@ -41,6 +43,15 @@ class TestICP(unittest.TestCase):
 
         self.assertFalse(np.any(transf[:3] == 0))
         assert_equal(transf[3], [0, 0, 0, 1])
+
+
+        print('recovered transform:')
+        print(transf)
+        print('true transform:')
+        print(self.full_transform)        
+
+        # self.assertTrue(np.allclose(transf, self.full_transform, 1e-6))
+
 
         # XXX I think I misunderstand fitness, it's not equal to the following
         # MSS.

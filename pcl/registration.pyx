@@ -17,7 +17,8 @@ cdef extern from "pcl/registration/registration.h" namespace "pcl" nogil:
     cdef cppclass Registration[Source, Target]:
         cppclass Matrix4:
             float *data()
-        void align(cpp.PointCloud[Source] &) except +
+        # void align(cpp.PointCloud[Source] &) except +
+        void align(cpp.PointCloud[Source] &, const Matrix4 guess) except +
         Matrix4 getFinalTransformation() except +
         double getFitnessScore() except +
         bool hasConverged() except +
@@ -39,7 +40,9 @@ cdef extern from "pcl/registration/icp_nl.h" namespace "pcl" nogil:
 
 
 cdef object run(Registration[cpp.PointXYZ, cpp.PointXYZ] &reg,
-                _pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
+                _pcl.PointCloud source, _pcl.PointCloud target,
+                np.ndarray[dtype=np.float32_t, ndim=2, mode='fortran'] guess,
+                max_iter=None):
     reg.setInputSource(source.thisptr_shared)
     reg.setInputTarget(target.thisptr_shared)
 
@@ -48,8 +51,14 @@ cdef object run(Registration[cpp.PointXYZ, cpp.PointXYZ] &reg,
 
     cdef _pcl.PointCloud result = _pcl.PointCloud()
 
+    # Convert the guess into Eigen from Numpy
+    cdef Registration[cpp.PointXYZ, cpp.PointXYZ].Matrix4 guess_mat
+    cdef np.float32_t *guess_data = <np.float32_t *>np.PyArray_DATA(guess)
+    for i in range(16):
+        guess_mat.data()[i] = guess_data[i]
+
     with nogil:
-        reg.align(result.thisptr()[0])
+        reg.align(result.thisptr()[0], guess_mat)
 
     # Get transformation matrix and convert from Eigen to NumPy format.
     cdef Registration[cpp.PointXYZ, cpp.PointXYZ].Matrix4 mat
@@ -66,7 +75,7 @@ cdef object run(Registration[cpp.PointXYZ, cpp.PointXYZ] &reg,
     return reg.hasConverged(), transf, result, reg.getFitnessScore()
 
 
-def icp(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
+def icp(_pcl.PointCloud source, _pcl.PointCloud target, guess=None, max_iter=None):
     """Align source to target using iterative closest point (ICP).
 
     Parameters
@@ -75,6 +84,8 @@ def icp(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
         Source point cloud.
     target : PointCloud
         Target point cloud.
+    guess : np.ndarray, shape = [4, 4], optional
+        Initial guess for the transform
     max_iter : integer, optional
         Maximum number of iterations. If not given, uses the default number
         hardwired into PCL.
@@ -91,10 +102,13 @@ def icp(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
         Sum of squares error in the estimated transformation.
     """
     cdef IterativeClosestPoint[cpp.PointXYZ, cpp.PointXYZ] icp
-    return run(icp, source, target, max_iter)
+    if guess is None:
+        guess = np.asfortranarray(np.eye(4, dtype=np.float32))
+    return run(icp, source, target, guess=np.asfortranarray(guess).astype(np.float32),
+               max_iter=max_iter)
 
 
-def gicp(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
+def gicp(_pcl.PointCloud source, _pcl.PointCloud target, guess=None, max_iter=None):
     """Align source to target using generalized iterative closest point (GICP).
 
     Parameters
@@ -103,6 +117,8 @@ def gicp(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
         Source point cloud.
     target : PointCloud
         Target point cloud.
+    guess : np.ndarray, shape = [4, 4], optional
+        Initial guess for the transform
     max_iter : integer, optional
         Maximum number of iterations. If not given, uses the default number
         hardwired into PCL.
@@ -119,10 +135,13 @@ def gicp(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
         Sum of squares error in the estimated transformation.
     """
     cdef GeneralizedIterativeClosestPoint[cpp.PointXYZ, cpp.PointXYZ] gicp
-    return run(gicp, source, target, max_iter)
+    if guess is None:
+        guess = np.asfortranarray(np.eye(4, dtype=np.float32))
+    return run(gicp, source, target, guess=np.asfortranarray(guess).astype(np.float32),
+               max_iter=max_iter)
 
 
-def icp_nl(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
+def icp_nl(_pcl.PointCloud source, _pcl.PointCloud target, guess=None, max_iter=None):
     """Align source to target using generalized non-linear ICP (ICP-NL).
 
     Parameters
@@ -131,7 +150,8 @@ def icp_nl(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
         Source point cloud.
     target : PointCloud
         Target point cloud.
-
+    guess : np.ndarray, shape = [4, 4], optional
+        Initial guess for the transform
     max_iter : integer, optional
         Maximum number of iterations. If not given, uses the default number
         hardwired into PCL.
@@ -148,4 +168,7 @@ def icp_nl(_pcl.PointCloud source, _pcl.PointCloud target, max_iter=None):
         Sum of squares error in the estimated transformation.
     """
     cdef IterativeClosestPointNonLinear[cpp.PointXYZ, cpp.PointXYZ] icp_nl
-    return run(icp_nl, source, target, max_iter)
+    if guess is None:
+        guess = np.asfortranarray(np.eye(4, dtype=np.float32))
+    return run(icp_nl, source, target, guess=np.asfortranarray(guess).astype(np.float32),
+               max_iter=max_iter)
